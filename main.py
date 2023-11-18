@@ -15,4 +15,5 @@ if __name__ == "__main__":
         print("Starting client")
         addr = input("Please enter the servers address: ")
         usr = input("Please enter your name: ")
-        Client(addr, PORT, usr)
+        autosync = input("Do you want the client to automatically sync (y/n)[y]:") != "n"
+        Client(addr, PORT, usr, autosync)

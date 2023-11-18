@@ -6,34 +6,43 @@ from time import sleep
 from list_utils import str_to_list, unify_lists
 
 class Client:
-    def __init__(self, addr: str, port: int, username: str) -> None:
+    def __init__(self, addr: str, port: int, username: str, autosync: bool = True) -> None:
         self._conn_tuple = (addr, port)
         self.the_list = []
 
         self._keepalive_thread = Thread(target=self.keepalive_func, daemon=True)
         self._keepalive_thread.start()
 
+        if autosync:
+            self._autosync_thread = Thread(target=self.autosync_func, daemon=True)
+            self._autosync_thread.start()
+            # wait for the sync to finish
+            sleep(0.5)
+
         self.username = username
 
         self.cli()
 
     def cli(self):
+        ID_LEN = 6
         USR_LEN = 16
         MSG_LEN = 112
         exit = False
 
         while not exit:
             print("-" * (USR_LEN + MSG_LEN))
-            print(f"user{' ' * (USR_LEN - 4)}message{' ' * (MSG_LEN - 7)}")
-            for item in self.the_list:
-                print(f"{item[2][:USR_LEN]}{' ' * (USR_LEN - len(item[2]))}{item[1][:MSG_LEN]}{' ' * (MSG_LEN - len(item[1]))}")
+            print(f"ID{' ' * (ID_LEN - 2)}USER{' ' * (USR_LEN - 4)}MESSAGE{' ' * (MSG_LEN - 7)}")
+            for c, item in enumerate(self.the_list):
+                print(f"{c}{' ' * (ID_LEN - len(str(c)))}{item[2][:USR_LEN]}{' ' * (USR_LEN - len(item[2]))}{item[1][:MSG_LEN]}{' ' * (MSG_LEN - len(item[1]))}")
             print("-" * (USR_LEN + MSG_LEN))
 
-            uin = input("> ")
+            uin = input("> ").strip()
 
             match uin:
                 case "exit" | "quit" | "stop" | "q":
                     exit = True
+                case "help" | "h":
+                    self.print_help()
                 case "get" | "load" | "pull":
                     self.get_database()
                 case "post" | "put" | "push" |"commit":
@@ -46,6 +55,24 @@ class Client:
                 case "edit" | "change":
                     self.edit_message()
 
+    def print_help(self):
+        """Print out a help message"""
+
+        cmds = {
+            "exit the program": ("exit", "quit", "stop", "q"),
+            "print this text": ("help", "h"),
+            "pull remote changes": ("get", "load", "pull"),
+            "push local changes": ("post", "put", "push", "commit"),
+            "pull and push changes": ("update", "sync"),
+            "create a new message": ("send", "new", "message", "msg"),
+            "edit a message": ("edit", "change")
+        }
+
+        print("List of commands:")
+        for desc, cmd in cmds.items():
+            cmd = " | ".join(cmd)
+            print(f"{cmd}{' ' * (32 - len(cmd))}{desc}")
+
     def create_message(self):
         """Create a new message"""
 
@@ -55,7 +82,11 @@ class Client:
                 uid += 1
         uid = f"{uid + 1}_{self.username}"
 
-        msg = input("Enter a message: ")
+        msg = None
+        while msg is None:
+            userin = input("Enter a message: ")
+            if self.is_msg_allowed(userin):
+                msg = userin
 
         self.the_list.append((uid, msg, self.username, datetime.now().timestamp()))
 
@@ -64,20 +95,32 @@ class Client:
 
         msgid = None
         while msgid is None:
-            usrin = input("Enter the message number: ")
-            if usrin.isdecimal():
-                usrin = int(usrin)
-                sel_msg = self.the_list[usrin - 1]
+            userin = input("Enter the message number: ")
+            if userin.isdecimal():
+                userin = int(userin)
+                sel_msg = self.the_list[userin]
                 if sel_msg[2] == self.username:
-                    confim = input(f"The currently selected message is \"{sel_msg[1]}\". Confirm (y/n): ")
-                    if confim == "y" or confim == "yes":
-                        msgid = usrin
+                    confim = input(f"The currently selected message is \"{sel_msg[1]}\". Confirm (y/n)[y]: ")
+                    if confim == "y" or confim == "yes" or confim == "":
+                        msgid = userin
                 else:
                     print("You didn't send this message!")
 
-        msg = input("Enter a message: ")
+        msg = None
+        while msg is None:
+            userin = input("Enter a message: ")
+            if self.is_msg_allowed(userin):
+                msg = userin
 
-        self.the_list[msgid - 1] = (sel_msg[0], msg, sel_msg[2], datetime.now().timestamp())
+        self.the_list[msgid] = (sel_msg[0], msg, sel_msg[2], datetime.now().timestamp())
+
+    def is_msg_allowed(self, msg: str) -> bool:
+        invalid_chars = ["'", '"', ",", "(", ")"]
+        for char in invalid_chars:
+            if char in msg:
+                return False
+        
+        return True
 
     def get_database(self) -> list[tuple[str, str]]:
         """Get the database"""
@@ -99,6 +142,20 @@ class Client:
                 assert self._recv(sock) == "ACK"
             except (ConnectionRefusedError, TimeoutError):
                 print("Sending keepalive to server failed, retrying in 10s...")
+            except (AssertionError) as aerr:
+                print(aerr)
+
+            sleep(10)
+
+    def autosync_func(self):
+        """Synchronize the database every 10 seconds"""
+
+        while True:
+            try:
+                self.get_database()
+                self.send_database()
+            except (ConnectionRefusedError, TimeoutError):
+                print("Autosync of database failed, retrying in 10s...")
             except (AssertionError) as aerr:
                 print(aerr)
 

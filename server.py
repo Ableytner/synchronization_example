@@ -1,5 +1,8 @@
+import os
+
 from socketserver import ThreadingTCPServer, BaseRequestHandler
-from threading import Lock
+from threading import Lock, Thread
+from time import sleep
 
 from list_utils import str_to_list, unify_lists
 
@@ -20,36 +23,24 @@ class Server():
     def sync_list(self, new_list: list[tuple[str, str, float]]):
         with self.lock:
             self.the_list = unify_lists(self.the_list, new_list)
-            return
+        
+        self.redraw_screen()
+    
+    def redraw_screen(self):
+        ID_LEN = 6
+        USR_LEN = 16
+        MSG_LEN = 96
 
-            uids = [item[0] for item in self.the_list]
-
-            for line in new_list:
-                # the element already exists
-                if line in self.the_list:
-                    continue
-
-                # the element is new
-                if line[0] not in uids:
-                    self.the_list.append(line)
-                    uids = [item[0] for item in self.the_list]
-                    continue
-
-                # the element has changed
-                if line[0] in uids:
-                    curr_line = self.the_list[uids.index(line[0])]
-
-                    # the current element is newer
-                    if curr_line[3] > line[3]:
-                        continue
-
-                    # the new element is newer
-                    self.the_list[uids.index(line[0])] = line
-                    uids = [item[0] for item in self.the_list]
+        os.system("cls")
+        print("-" * (USR_LEN + MSG_LEN))
+        print(f"ID{' ' * (ID_LEN - 2)}USER{' ' * (USR_LEN - 4)}MESSAGE{' ' * (MSG_LEN - 7)}")
+        for c, item in enumerate(self.the_list):
+            print(f"{c}{' ' * (ID_LEN - len(str(c)))}{item[2][:USR_LEN]}{' ' * (USR_LEN - len(item[2]))}{item[1][:MSG_LEN]}{' ' * (MSG_LEN - len(item[1]))}")
+        print("-" * (USR_LEN + MSG_LEN))
 
 class TCPClientHandler(BaseRequestHandler):
     def handle(self) -> None:
-        print(f"Received message from {self.client_address}")
+        # print(f"Received message from {self.client_address}")
 
         req = orig_req = self.receive_text()
 
@@ -78,13 +69,10 @@ class TCPClientHandler(BaseRequestHandler):
             case "PUT":
                 req_type, req = req.split(" ", maxsplit=1)
                 if req_type == "db":
-                    print(req)
 
                     conv_req = str_to_list(req)
-                    print(conv_req)
 
                     Server.instance.sync_list(conv_req)
-                    print(Server.instance.the_list)
 
                     self.send_text("ACK")
                     return
