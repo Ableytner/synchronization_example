@@ -39,25 +39,33 @@ class Server():
         
         while True:
             for addr in self._servers:
-                # send local database
-                sock = create_connection((addr, self._conn_tuple[1]))
-                self._send(sock, f"PUT db {self.the_list}")
-                assert self._recv(sock) == "ACK"
+                try:
+                    # send local database
+                    sock = create_connection((addr, self._conn_tuple[1]))
+                    self._send(sock, f"PUT db {self.the_list}")
+                    assert self._recv(sock) == "ACK"
 
-                # receive remote database
-                sock = create_connection((addr, self._conn_tuple[1]))
-                self._send(sock, "GET db")
-                new_list = str_to_list(self._recv(sock))
-                self.sync_list(new_list)
+                    # receive remote database
+                    sock = create_connection((addr, self._conn_tuple[1]))
+                    self._send(sock, "GET db")
+                    new_list = str_to_list(self._recv(sock))
+                    self.sync_list(new_list)
+                # ignore the server if it is offline
+                except ConnectionRefusedError:
+                    pass
 
             sleep(10)
 
     def sync_list(self, new_list: list[tuple[str, str, float]]):
+        old_hash = hash(tuple(self.the_list))
+
         with self.lock:
             self.the_list = unify_lists(self.the_list, new_list)
         
-        self.redraw_screen()
-    
+        # redraw screen if the_list has changed
+        if hash(tuple(self.the_list)) != old_hash:
+            self.redraw_screen()
+
     def redraw_screen(self):
         ID_LEN = 6
         USR_LEN = 16
