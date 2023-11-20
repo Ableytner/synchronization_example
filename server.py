@@ -1,3 +1,4 @@
+import sys
 import os
 
 from socketserver import ThreadingTCPServer, BaseRequestHandler
@@ -31,7 +32,10 @@ class Server():
         USR_LEN = 16
         MSG_LEN = 96
 
-        os.system("cls")
+        if sys.platform == "win32":
+            os.system("cls")
+        else:
+            os.system("clear")
         print("-" * (USR_LEN + MSG_LEN))
         print(f"ID{' ' * (ID_LEN - 2)}USER{' ' * (USR_LEN - 4)}MESSAGE{' ' * (MSG_LEN - 7)}")
         for c, item in enumerate(self.the_list):
