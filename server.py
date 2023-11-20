@@ -51,7 +51,7 @@ class Server():
                     new_list = str_to_list(self._recv(sock))
                     self.sync_list(new_list)
                 # ignore the server if it is offline
-                except ConnectionRefusedError:
+                except (TimeoutError, ConnectionRefusedError):
                     pass
 
             sleep(10)
