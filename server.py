@@ -1,6 +1,8 @@
+import re
 import sys
 import os
 
+from socket import create_connection
 from socketserver import ThreadingTCPServer, BaseRequestHandler
 from threading import Lock, Thread
 from time import sleep
@@ -13,6 +15,10 @@ class Server():
         self._socketserver = ThreadingTCPServer(self._conn_tuple, TCPClientHandler)
         self.the_list: list[tuple[str, str, str, float]] = []
 
+        self._servers = []
+        self._serversync_thread = Thread(target=self.serversync_func, daemon=True)
+        self._serversync_thread.start()
+
         Server.instance = self
         Server.lock = Lock()
 
@@ -20,6 +26,31 @@ class Server():
 
     instance = None
     lock = None
+
+    def serversync_func(self):
+        if not os.path.isfile("servers.txt"):
+            with open("servers.txt", "w+"):
+                pass
+        
+        with open("servers.txt", "r") as f:
+            for addr in f.readlines():
+                if re.match(r"^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$", addr):
+                    self._servers.append(addr.strip())
+        
+        while True:
+            for addr in self._servers:
+                # send local database
+                sock = create_connection((addr, self._conn_tuple[1]))
+                self._send(sock, f"PUT db {self.the_list}")
+                assert self._recv(sock) == "ACK"
+
+                # receive remote database
+                sock = create_connection((addr, self._conn_tuple[1]))
+                self._send(sock, "GET db")
+                new_list = str_to_list(self._recv(sock))
+                self.sync_list(new_list)
+
+            sleep(10)
 
     def sync_list(self, new_list: list[tuple[str, str, float]]):
         with self.lock:
@@ -41,6 +72,28 @@ class Server():
         for c, item in enumerate(self.the_list):
             print(f"{c}{' ' * (ID_LEN - len(str(c)))}{item[2][:USR_LEN]}{' ' * (USR_LEN - len(item[2]))}{item[1][:MSG_LEN]}{' ' * (MSG_LEN - len(item[1]))}")
         print("-" * (USR_LEN + MSG_LEN))
+
+    def _send(self, sock, text):
+        """Send a string to the given socket"""
+
+        sock.send(self._string_to_bytes(text))
+
+    def _recv(self, sock):
+        """Receive a string from the given socket"""
+
+        return self._bytes_to_string(sock.recv(4096))
+
+    @staticmethod
+    def _string_to_bytes(input_text):
+        """Convert a string to a bytes object"""
+
+        return bytes(input_text, 'utf-8')
+
+    @staticmethod
+    def _bytes_to_string(input_bytes):
+        """Convert a bytes object to a string"""
+
+        return input_bytes.decode()
 
 class TCPClientHandler(BaseRequestHandler):
     def handle(self) -> None:

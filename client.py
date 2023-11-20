@@ -98,13 +98,16 @@ class Client:
             userin = input("Enter the message number: ")
             if userin.isdecimal():
                 userin = int(userin)
-                sel_msg = self.the_list[userin]
-                if sel_msg[2] == self.username:
-                    confim = input(f"The currently selected message is \"{sel_msg[1]}\". Confirm (y/n)[y]: ")
-                    if confim == "y" or confim == "yes" or confim == "":
-                        msgid = userin
+                if userin < len(self.the_list):
+                    sel_msg = self.the_list[userin]
+                    if sel_msg[2] == self.username:
+                        confim = input(f"The currently selected message is \"{sel_msg[1]}\". Confirm (y/n)[y]: ")
+                        if confim == "y" or confim == "yes" or confim == "":
+                            msgid = userin
+                    else:
+                        print("You didn't send this message!")
                 else:
-                    print("You didn't send this message!")
+                    print("A message with this id doesn't exist!")
 
         msg = None
         while msg is None:
